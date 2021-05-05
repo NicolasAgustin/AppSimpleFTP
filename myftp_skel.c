@@ -102,7 +102,7 @@ char * read_input() {
  **/
 void authenticate(int sd) {
     char *input, desc[100];
-    int code;
+    int code, passwordTry = 0;
 
     // aca si la contrasena o el usuario es incorrecto hago un exit
 
@@ -119,24 +119,38 @@ void authenticate(int sd) {
 
     // wait to receive password requirement and check for errors
     // espero una respuesta 331, si es distinto entonces cierro
+    if(recv_msg(sd, 331, NULL)){
+        while(passwordTry < 3){
+            // ask for password
+            // podriamos intentar meter la password hasta 3 veces
+            printf("passwd: ");
+            input = read_input();
 
-    // ask for password
-    // podriamos intentar meter la password hasta 3 veces
-    printf("passwd: ");
-    input = read_input();
+            // send the command to the server
+            // envio el comando PASS
+            send_msg(sd, "PASS", input);
 
-    // send the command to the server
-    // envio el comando PASS
+            // release memory
+            free(input);
 
-    // release memory
-    free(input);
+            // wait for answer and process it and check for errors
+            // 230 USER username logged, la password es correcta
 
-    // wait for answer and process it and check for errors
-    // 230 USER username logged, la password es correcta
-
+            if(recv_msg(sd, 230, &desc)){
+                printf("%s \n", desc);
+                break;
+            } else {
+                passwordTry++;
+                printf("Incorrect password, try again.\n");
+            }
+        }
+        if(passwordTry == 3){
+            errx(6, "Limite de intentos alcanzado.");
+        }
+    } else {
+        errx(5, "Usuario incorrecto.");
+    }
     // podria intentar reenviar el commando, user se podria enviar tantas veces como se quisiera
-
-
 }
 
 /**
@@ -227,8 +241,6 @@ int main (int argc, char *argv[]) {
         connection_port = atoi(argv[2]);
 
         if(VALID_PORT(connection_port)){
-            
-            //addr.sin_addr = inet(argv[2]);
 
             // create socket and check for errors
             sd = socket(AF_INET, SOCK_STREAM, 0);
