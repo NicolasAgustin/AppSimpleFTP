@@ -11,6 +11,8 @@
 
 #define BUFSIZE 512
 
+#define VALID_PORT(x) ((x > 0 && x < 65535) ? 1 : 0) 
+
 /**
  * function: receive and analize the answer from the server
  * sd: socket descriptor
@@ -20,18 +22,33 @@
  *       is copied
  * return: result of code checking
  **/
+// code es el codigo que se espera recibir del servidor
+// si a text le paso NULL descarto la respuesta (mensaje de caracteres)
+// si le paso a text una variable extraigo el mensaje de respuesta
 bool recv_msg(int sd, int code, char *text) {
+    /** 
+     * buffer: donde se recibe el buffer
+    */
     char buffer[BUFSIZE], message[BUFSIZE];
+    /** 
+     * recv_s: longitud del mensaje recibido
+    */
     int recv_s, recv_code;
 
     // receive the answer
-
+    // recv y send
+    recv_s = read(sd, buffer, BUFSIZE);
 
     // error checking
+    // warn manda al stderr un mensaje de warning pero no llama a exit
     if (recv_s < 0) warn("error receiving data");
     if (recv_s == 0) errx(1, "connection closed by host");
 
     // parsing the code and message receive from the answer
+    /** 
+     * toma de buffer un entero y luego aplicamos expresiones regulares para extraer el mensaje que esta despues del codigo
+    */
+    //    entrada formateo regex        codigo    mensaje 
     sscanf(buffer, "%d %[^\r\n]\r\n", &recv_code, message);
     printf("%d %s\n", recv_code, message);
     // optional copy of parameters
@@ -46,6 +63,9 @@ bool recv_msg(int sd, int code, char *text) {
  * operation: four letters command
  * param: command parameters
  **/
+
+// param podria usar strtok para dividir en palabras
+
 void send_msg(int sd, char *operation, char *param) {
     char buffer[BUFSIZE] = "";
 
@@ -56,6 +76,10 @@ void send_msg(int sd, char *operation, char *param) {
         sprintf(buffer, "%s\r\n", operation);
 
     // send command and check for errors
+    if(write(sd, buffer, strlen(buffer)+1) < 0){
+        // arrojo un warning
+        warn("Error enviando el comando.");
+    }
 
 }
 
@@ -66,6 +90,7 @@ void send_msg(int sd, char *operation, char *param) {
 char * read_input() {
     char *input = malloc(BUFSIZE);
     if (fgets(input, BUFSIZE, stdin)) {
+        // barre input y devuelve una string donde encuentre el caracter \n
         return strtok(input, "\n");
     }
     return NULL;
@@ -79,29 +104,38 @@ void authenticate(int sd) {
     char *input, desc[100];
     int code;
 
+    // aca si la contrasena o el usuario es incorrecto hago un exit
+
     // ask for user
     printf("username: ");
     input = read_input();
 
     // send the command to the server
-    
+    //send_msg
+    send_msg(sd, "USER", input);
+
     // relese memory
     free(input);
 
     // wait to receive password requirement and check for errors
-
+    // espero una respuesta 331, si es distinto entonces cierro
 
     // ask for password
+    // podriamos intentar meter la password hasta 3 veces
     printf("passwd: ");
     input = read_input();
 
     // send the command to the server
-
+    // envio el comando PASS
 
     // release memory
     free(input);
 
     // wait for answer and process it and check for errors
+    // 230 USER username logged, la password es correcta
+
+    // podria intentar reenviar el commando, user se podria enviar tantas veces como se quisiera
+
 
 }
 
@@ -184,20 +218,64 @@ void operate(int sd) {
  *         ./myftp <SERVER_IP> <SERVER_PORT>
  **/
 int main (int argc, char *argv[]) {
-    int sd;
+    int sd, connection_port;
     struct sockaddr_in addr;
 
     // arguments checking
+    if(argc == 3){
+        
+        connection_port = atoi(argv[2]);
 
-    // create socket and check for errors
+        if(VALID_PORT(connection_port)){
+            
+            //addr.sin_addr = inet(argv[2]);
+
+            // create socket and check for errors
+            sd = socket(AF_INET, SOCK_STREAM, 0);
+            if(sd < 0){ 
+                errx(3, "Error en creacion del socket"); 
+            }
+
+            // set socket data    
+            addr.sin_family = AF_INET;
+            addr.sin_addr.s_addr = inet(argv[1]);
+            addr.sin_port = htons(connection_port);
+
+            // connect and check for errors
+            if(connect(sd, (struct sockaddr *)&addr, sizeof(addr)) < 0){
+                errx(4, "Error en la coneccion del socket");
+            }
+
+
+            // if receive hello proceed with authenticate and operate if not warning
+            // recv_msg(sd, 220, text)
+            // el servidor manda 220 si el cliente se pudo conectar con exito
+            // el cliente siempre consulta al server con comandos de texto
+            if(recv_msg(sd, 220, NULL)){
+                // Comienza el procesamiento del programa
+
+                // enviar comando de autenticacion
+                authenticate(sd);
+
+            } else {
+                warn("Fallo en obtener respuesta hello del server.");
+            }
+
+            // close socket
+
+        } else {
+            // errx
+            errx(2,"Puerto invalido.");
+        }
+    } else {
+        // errx
+        errx(1,"Cantidad de argumentos incorrecta\nUso: ./myftp <SERVER_IP> <PORT>");
+    }
     
-    // set socket data    
-
-    // connect and check for errors
-
-    // if receive hello proceed with authenticate and operate if not warning
-
-    // close socket
 
     return 0;
 }
+
+// resuelto main hasta autenticate
+// send_msg 
+// recv_msg
