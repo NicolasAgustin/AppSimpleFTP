@@ -105,7 +105,10 @@ void authenticate(int sd) {
     int code, passwordTry = 0;
 
     // aca si la contrasena o el usuario es incorrecto hago un exit
-
+    /** 
+     * aca puede ir un bucle infinito para que el comando USER se pueda enviar todas las veces que se quiera
+     * se puede definir un handler para la signal SIGKILL, entonces cuando el usuario presiona ctrl+c la funcion retorna.
+    */
     // ask for user
     printf("username: ");
     input = read_input();
