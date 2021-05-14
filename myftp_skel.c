@@ -139,7 +139,7 @@ void authenticate(int sd) {
             // wait for answer and process it and check for errors
             // 230 USER username logged, la password es correcta
 
-            if(recv_msg(sd, 230, &desc)){
+            if(recv_msg(sd, 230, desc)){
                 printf("%s \n", desc);
                 break;
             } else {
@@ -161,32 +161,32 @@ void authenticate(int sd) {
  * sd: socket descriptor
  * file_name: file name to get from the server
  **/
-void get(int sd, char *file_name) {
-    char desc[BUFSIZE], buffer[BUFSIZE];
-    int f_size, recv_s, r_size = BUFSIZE;
-    FILE *file;
+// void get(int sd, char *file_name) {
+//     char desc[BUFSIZE], buffer[BUFSIZE];
+//     int f_size, recv_s, r_size = BUFSIZE;
+//     FILE *file;
 
-    // send the RETR command to the server
+//     // send the RETR command to the server
 
-    // check for the response
+//     // check for the response
 
-    // parsing the file size from the answer received
-    // "File %s size %ld bytes"
-    sscanf(buffer, "File %*s size %d bytes", &f_size);
+//     // parsing the file size from the answer received
+//     // "File %s size %ld bytes"
+//     sscanf(buffer, "File %*s size %d bytes", &f_size);
 
-    // open the file to write
-    file = fopen(file_name, "w");
+//     // open the file to write
+//     file = fopen(file_name, "w");
 
-    //receive the file
+//     //receive the file
 
 
 
-    // close the file
-    fclose(file);
+//     // close the file
+//     fclose(file);
 
-    // receive the OK from the server
+//     // receive the OK from the server
 
-}
+// }
 
 /**
  * function: operation quit
@@ -194,9 +194,9 @@ void get(int sd, char *file_name) {
  **/
 void quit(int sd) {
     // send command QUIT to the client
-
+    send_msg(sd, "QUIT", NULL);
     // receive the answer from the server
-
+    recv_msg(sd, 221, NULL);
 }
 
 /**
@@ -209,13 +209,16 @@ void operate(int sd) {
     while (true) {
         printf("Operation: ");
         input = read_input();
-        if (input == NULL)
+        if (input == NULL) {
             continue; // avoid empty input
+        }
+        // retorna un token en cada llamada a strtok, cuando se le envia NULL, trabaja con la string que ya tenia cargada (la variable es static)
         op = strtok(input, " ");
         // free(input);
+        
         if (strcmp(op, "get") == 0) {
-            param = strtok(NULL, " ");
-            get(sd, param);
+            //param = strtok(NULL, " ");
+            //get(sd, param);
         }
         else if (strcmp(op, "quit") == 0) {
             quit(sd);
@@ -253,7 +256,7 @@ int main (int argc, char *argv[]) {
 
             // set socket data    
             addr.sin_family = AF_INET;
-            addr.sin_addr.s_addr = inet(argv[1]);
+            addr.sin_addr.s_addr = inet_addr(argv[1]);
             addr.sin_port = htons(connection_port);
 
             // connect and check for errors
@@ -271,6 +274,8 @@ int main (int argc, char *argv[]) {
 
                 // enviar comando de autenticacion
                 authenticate(sd);
+
+                operate(sd);
 
             } else {
                 warn("Fallo en obtener respuesta hello del server.");
@@ -291,6 +296,6 @@ int main (int argc, char *argv[]) {
     return 0;
 }
 
-// resuelto main hasta autenticate
-// send_msg 
-// recv_msg
+/** 
+ * 
+*/

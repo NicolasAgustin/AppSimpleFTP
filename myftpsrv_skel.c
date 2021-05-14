@@ -22,6 +22,9 @@
 #define MSG_299 "299 File %s size %ld bytes\r\n"
 #define MSG_226 "226 Transfer complete\r\n"
 
+#define VALID_PORT(x) ((x > 0 && x < 65535) ? 1 : 0) 
+//#define _PRUEBA_CREDENTIALS_
+
 /**
  * function: receive the commands from the client
  * sd: socket descriptor
@@ -39,8 +42,10 @@ bool recv_cmd(int sd, char *operation, char *param) {
     int recv_s;
 
     // receive the command in the buffer and check for errors
-
-
+    if((recv_s = read(sd, buffer, BUFSIZE)) <= 0){
+        warn("Error leyendo del socket.");
+        return false;
+    }
 
     // expunge the terminator characters from the buffer
     buffer[strcspn(buffer, "\r\n")] = 0;
@@ -72,6 +77,7 @@ bool recv_cmd(int sd, char *operation, char *param) {
  * return: true if not problem arise or else
  * notes: the MSG_x have preformated for these use
  **/
+// argumentos variables
 bool send_ans(int sd, char *message, ...){
     char buffer[BUFSIZE];
 
@@ -80,10 +86,14 @@ bool send_ans(int sd, char *message, ...){
 
     vsprintf(buffer, message, args);
     va_end(args);
+
     // send answer preformated and check errors
+    if(write(sd, buffer, strlen(message) < 0)) {
+        warn("Error al escribir en el socket");
+        return false;
+    }
 
-
-
+    return true;
 
 }
 
@@ -93,7 +103,8 @@ bool send_ans(int sd, char *message, ...){
  * file_path: name of the RETR file
  **/
 
-void retr(int sd, char *file_path) {
+
+/* void retr(int sd, char *file_path) {
     FILE *file;    
     int bread;
     long fsize;
@@ -112,6 +123,8 @@ void retr(int sd, char *file_path) {
 
     // send a completed transfer message
 }
+*/
+
 /**
  * funcion: check valid credentials in ftpusers file
  * user: login user name
@@ -119,20 +132,49 @@ void retr(int sd, char *file_path) {
  * return: true if found or false if not
  **/
 bool check_credentials(char *user, char *pass) {
-    FILE *file;
+    FILE *file = NULL;
     char *path = "./ftpusers", *line = NULL, cred[100];
     size_t len = 0;
     bool found = false;
 
     // make the credential string
+    strncat(cred, user, strlen(user));
+    strncat(cred, ":", 2);
+    strncat(cred, pass, strlen(pass));
+
+    #if DEBUG
+    printf("[%s]\n", cred);
+    #endif
 
     // check if ftpusers file it's present
+    file = fopen(path, "r+");
+    if(! (file == NULL)){
+        
+        // search for credential string
+        line = (char*)malloc(sizeof(cred));
+        while(fgets(line, sizeof(cred), file)){
+            len = strcspn(line, "\n");
+            line[len] = 0;
+            if(strcmp(line, cred) == 0){
+                found = true;
+                break;
+            }
+            #if DEBUG
+            printf("[%s]\n", line);
+            #endif
+        }
 
-    // search for credential string
-
-    // close file and release any pointes if necessary
+        // close file and release any pointes if necessary
+        fclose(file);
+        free(line);
+        
+    } else {
+        warnx("Credentials file missing");
+    }
 
     // return search status
+    // provisional
+    return found;
 }
 
 /**
@@ -144,12 +186,35 @@ bool authenticate(int sd) {
     char user[PARSIZE], pass[PARSIZE];
 
     // wait to receive USER action
+    if(!recv_cmd(sd, "USER", user)){
+        warn("Error en recepcion del nombre de usuario (comando USER).");
+        return false;
+    }
 
     // ask for password
+    if(!send_ans(sd, MSG_331, user)) {
+        warn("Error solicitando la password");
+    }
 
     // wait to receive PASS action
+    if(!recv_cmd(sd, "PASS", pass)){
+        warn("Error en recepcion de la password de usuario (comando PASS).");
+        return false;
+    }
 
     // if credentials don't check denied login
+    if(check_credentials(user, pass)) {
+        if(!send_ans(sd, MSG_230, user)) {
+            warn("Error enviando confirmacion de login");
+            return false;
+        }
+        return true;
+    } else {
+        if(!send_ans(sd, MSG_530)) {
+            warn("Error enviando confirmacion de login");
+        }
+        return false;
+    }
 
     // confirm login
 }
@@ -165,17 +230,16 @@ void operate(int sd) {
     while (true) {
         op[0] = param[0] = '\0';
         // check for commands send by the client if not inform and exit
-
+        if(!recv_cmd(sd, op, param)){
+            warn("Flujo anormal.");
+            continue;
+        }
 
         if (strcmp(op, "RETR") == 0) {
-            retr(sd, param);
+            //retr(sd, param);
         } else if (strcmp(op, "QUIT") == 0) {
             // send goodbye and close connection
-
-
-
-
-            break;
+            send_ans(sd, MSG_221);
         } else {
             // invalid command
             // furute use
@@ -191,24 +255,76 @@ int main (int argc, char *argv[]) {
 
     // arguments checking
 
-    // reserve sockets and variables space
+    #ifndef _PRUEBA_CREDENTIALS_
+    if(argc == 2) {
 
-    // create server socket and check errors
-    
-    // bind master socket and check errors
+        if(VALID_PORT(atoi(argv[1]))){
+            // reserve sockets and variables space
+            // slave: client    master: server
+            int msd, ssd;
+            struct sockaddr_in m_addr, s_addr;
+            socklen_t s_addr_len;
 
-    // make it listen
+            // create server socket and check errors
+            msd = socket(AF_INET, SOCK_STREAM, 0);
+            if (msd < 0) {
+                errx(2, "Error en la creacion del socket.");
+            }
 
-    // main loop
-    while (true) {
-        // accept connectiones sequentially and check errors
+            m_addr.sin_family = AF_INET;
+            m_addr.sin_addr.s_addr = INADDR_ANY; 
+            m_addr.sin_port = htons(atoi(argv[1]));
 
-        // send hello
+            // bind master socket and check errors
+            if(bind(msd, (struct sockaddr *) &m_addr, sizeof(m_addr)) < 0){
+                errx(3, "Error en bind.");
+            }
 
-        // operate only if authenticate is true
+            // make it listen
+            if(listen(msd, 10) < 0){
+                errx(4, "Error en listen");
+            }
+
+            // main loop
+            while (true) {
+                // accept connectiones sequentially and check errors
+                s_addr_len = sizeof(s_addr);
+
+                ssd = accept(msd, (struct sockaddr*) &s_addr, s_addr_len);
+                if(ssd < 0) {
+                    errx(5, "Erroe en accept.");
+                }
+
+                #if DEBUG 
+                printf("El cliente se conecto.");
+                #endif
+
+                // send hello
+                send_ans(ssd, MSG_220);
+
+                // operate only if authenticate is true
+                if(authenticate(ssd)) {
+                    operate(ssd);
+                } else {
+                    warn("Conexion cerrada");
+                    close(ssd);
+                }
+
+            }
+            close(msd);
+            // close server socket
+        }
+        
+    } else {
+        errx(1, "Cantidad de argumentos incorrecta.\nUso: ./mysrv <SERVER_PORT>\n");
     }
-
-    // close server socket
+    #else
+    if(check_credentials("juanito","juanito")){
+        printf("Usuario logeado con exito\n");
+    } else {
+        printf("Usuario no logeado\n");
+    }
+    #endif
 
     return 0;
 }
