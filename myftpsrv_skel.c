@@ -88,7 +88,7 @@ bool send_ans(int sd, char *message, ...){
     va_end(args);
 
     // send answer preformated and check errors
-    if(write(sd, buffer, strlen(message) < 0)) {
+    if(write(sd, buffer, strlen(message)) < 0) {
         warn("Error al escribir en el socket");
         return false;
     }
@@ -290,7 +290,7 @@ int main (int argc, char *argv[]) {
                 // accept connectiones sequentially and check errors
                 s_addr_len = sizeof(s_addr);
 
-                ssd = accept(msd, (struct sockaddr*) &s_addr, s_addr_len);
+                ssd = accept(msd, (struct sockaddr*) &s_addr, &s_addr_len);
                 if(ssd < 0) {
                     errx(5, "Erroe en accept.");
                 }
